@@ -15,9 +15,6 @@ router = APIRouter(prefix="/v1", tags=["forecast"])
 
 
 def parse_hhmm(value: str) -> time:
-    """
-    Parse 'HH:MM' into datetime.time.
-    """
     try:
         hh_str, mm_str = value.split(":")
         hh = int(hh_str)
@@ -34,42 +31,46 @@ def validate_timezone(tz_name: str) -> str:
         ZoneInfo(tz_name)
         return tz_name
     except ZoneInfoNotFoundError:
-        logger.exception("ZoneInfo lookup failed (timezone=%s). tzdata may be missing.", tz_name)
-        raise ValueError("timezone not available (tzdata missing?)")
+        logger.warning("Invalid or unavailable timezone requested: %s", tz_name)
+        raise ValueError("timezone not available")
 
 
 @router.get("/forecast")
 def forecast(
-        lat: float = Query(default=None, description="Latitude"),
-        lon: float = Query(default=None, description="Longitude"),
-        tz: str = Query(default="Europe/Belgrade", description="IANA timezone name"),
-        at: str = Query(default="14:00", description="Target local time in HH:MM"),
+        lat: float | None = Query(default=None),
+        lon: float | None = Query(default=None),
+        tz: str = Query(default="Europe/Belgrade"),
+        at: str = Query(default="14:00"),
 ) -> dict:
     logger.info("Request /v1/forecast lat=%s lon=%s tz=%s at=%s", lat, lon, tz, at)
+
     settings = get_settings()
 
-    # defaults for Belgrade if coords are not provided
     if lat is None:
         lat = settings.default_lat
     if lon is None:
         lon = settings.default_lon
 
-    # validate params
     try:
         tz_name = validate_timezone(tz)
         target_time = parse_hhmm(at)
     except ValueError as exc:
-        logger.warning("Invalid request params: %s", exc)
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    # fetch upstream
     try:
         data = MetClient().fetch_locationforecast_compact(lat, lon).data
     except Exception as exc:
         logger.exception("MET upstream failure")
-        raise HTTPException(status_code=502, detail=f"MET upstream error: {type(exc).__name__}") from exc
+        raise HTTPException(
+            status_code=502,
+            detail=f"MET upstream error: {type(exc).__name__}",
+        ) from exc
 
-    selector = DailyTemperatureSelector(tz_name=tz_name, target_time=target_time)
+    selector = DailyTemperatureSelector(
+        tz_name=tz_name,
+        target_time=target_time,
+    )
+
     days = selector.select_from_met_response(data)
 
     return {
@@ -80,7 +81,11 @@ def forecast(
             "target_time": at,
         },
         "days": [
-            {"date": p.date, "time": p.time, "temperature_c": p.temperature_c}
+            {
+                "date": p.date,
+                "time": p.time,
+                "temperature_c": p.temperature_c,
+            }
             for p in days
         ],
     }

@@ -1,7 +1,7 @@
-# src/met_weather_service/services/met_client.py
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import dataclass
 from typing import Any
 
@@ -19,19 +19,26 @@ class MetResponse:
 
 
 def _truncate_coord(value: float) -> float:
-    return round(value, 4)
+    """
+    Truncate coordinate to max 4 decimal places as required by MET ToS.
+    """
+    return math.trunc(value * 10_000) / 10_000
 
 
 class MetClient:
     def __init__(self) -> None:
-        s = get_settings()
-        if not s.user_agent:
+        settings = get_settings()
+
+        if not settings.user_agent:
             raise RuntimeError("MET_USER_AGENT is not set (required by MET Norway ToS).")
 
-        self._base_url = s.met_base_url
-        self._timeout = httpx.Timeout(s.read_timeout_s, connect=s.connect_timeout_s)
+        self._base_url = settings.met_base_url
+        self._timeout = httpx.Timeout(
+            settings.read_timeout_s,
+            connect=settings.connect_timeout_s,
+        )
         self._headers = {
-            "User-Agent": s.user_agent,
+            "User-Agent": settings.user_agent,
             "Accept": "application/json",
             "Accept-Encoding": "gzip, deflate",
         }
@@ -45,7 +52,11 @@ class MetClient:
 
         logger.info("MET request: %s params=%s", url, params)
 
-        with httpx.Client(headers=self._headers, timeout=self._timeout, follow_redirects=True) as client:
+        with httpx.Client(
+                headers=self._headers,
+                timeout=self._timeout,
+                follow_redirects=True,
+        ) as client:
             resp = client.get(url, params=params)
 
         logger.info("MET response: status=%s", resp.status_code)
