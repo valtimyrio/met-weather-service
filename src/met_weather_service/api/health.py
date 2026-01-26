@@ -2,7 +2,7 @@ import logging
 
 from fastapi import APIRouter, HTTPException
 
-from met_weather_service.core.config import settings
+from met_weather_service.core.config import get_settings
 from met_weather_service.services.met_client import MetClient
 
 logger = logging.getLogger(__name__)
@@ -16,6 +16,7 @@ def health() -> dict[str, str]:
 
 @router.get("/health/met")
 def health_met() -> dict[str, str]:
+    settings = get_settings()
     try:
         client = MetClient()
         data = client.fetch_locationforecast_compact(settings.default_lat, settings.default_lon).data
