@@ -21,6 +21,8 @@ Key behavior
 Swagger UI is available at:
 - /docs
 
+WebUI is available at `/` (alias `/ui`)
+
 ### GET /health
 Liveness probe.
 

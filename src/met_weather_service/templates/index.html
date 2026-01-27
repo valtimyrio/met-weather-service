@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>{{ title }}</title>
+    <style>
+        *, *::before, *::after {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+            margin: 24px;
+        }
+
+        .container {
+            max-width: 980px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            margin: 0 0 12px;
+        }
+
+        .card {
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 16px;
+            margin: 12px 0;
+        }
+
+        .row {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            align-items: flex-start;
+        }
+
+        .row > div {
+            flex: 1 1 320px;
+            min-width: 360px;
+        }
+
+        label {
+            display: block;
+            font-size: 13px;
+            color: #333;
+            margin-bottom: 6px;
+        }
+
+        input[type="text"], input[type="number"] {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+        }
+
+
+        button {
+            padding: 10px 14px;
+            border: 0;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        button.primary {
+            background: #111;
+            color: #fff;
+        }
+
+        button.secondary {
+            background: #eee;
+            color: #111;
+        }
+
+        .muted {
+            color: #666;
+            font-size: 13px;
+        }
+
+        .error {
+            background: #fff3f3;
+            border: 1px solid #f2b8b8;
+            color: #8a1f1f;
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 10px;
+            display: none;
+        }
+
+        .ok {
+            background: #f3fff5;
+            border: 1px solid #b8f2c1;
+            color: #1f8a2c;
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 10px;
+            display: none;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        th, td {
+            border-bottom: 1px solid #eee;
+            padding: 10px;
+            text-align: left;
+        }
+
+        th {
+            font-size: 13px;
+            color: #333;
+        }
+
+        .results {
+            margin-top: 10px;
+        }
+
+        .radio-list {
+            display: grid;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .radio-item {
+            display: flex;
+            gap: 8px;
+            align-items: flex-start;
+        }
+
+        .radio-item input {
+            margin-top: 3px;
+        }
+
+        .pill {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 999px;
+            background: #f3f3f3;
+            font-size: 12px;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>{{ title }}</h1>
+    <div class="muted">
+        Select a location (by place search or coordinates), set time, then fetch the daily forecast near that local
+        time.
+    </div>
+
+    <div class="card">
+        <h2 style="margin: 0 0 10px; font-size: 16px;">1) Location</h2>
+
+        <div class="row">
+            <div>
+                <label for="place">Place / City</label>
+                <input id="place" type="text" placeholder="e.g. Belgrade"/>
+                <div style="margin-top: 10px; display: flex; gap: 10px;">
+                    <button id="btnSearch" class="secondary" type="button">Search place</button>
+                    <button id="btnClearPlace" class="secondary" type="button">Clear</button>
+                </div>
+                <div class="muted" style="margin-top: 8px;">
+                    Uses /v1/geocode. Pick a candidate to fill coordinates.
+                </div>
+                <div id="geocodeResults" class="results"></div>
+            </div>
+
+            <div>
+                <label for="lat">Latitude</label>
+                <input id="lat" type="number" step="0.00001" placeholder="44.8125"/>
+                <label for="lon" style="margin-top: 10px;">Longitude</label>
+                <input id="lon" type="number" step="0.00001" placeholder="20.4612"/>
+                <div class="muted" style="margin-top: 8px;">
+                    Leave empty to use default coordinates (Belgrade).
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2 style="margin: 0 0 10px; font-size: 16px;">2) Time selection</h2>
+        <div class="row">
+            <div>
+                <label for="tz">Timezone (IANA)</label>
+                <input id="tz" type="text" value="Europe/Belgrade"/>
+            </div>
+            <div>
+                <label for="at">Target time (HH:MM)</label>
+                <input id="at" type="text" value="14:00"/>
+            </div>
+        </div>
+
+        <div style="margin-top: 10px;">
+            <label style="display:flex; gap:10px; align-items:center; margin:0;">
+                <input id="includePlace" type="checkbox" checked/>
+                <span>Include place name</span>
+            </label>
+        </div>
+
+
+        <div style="margin-top: 14px; display:flex; gap: 10px; align-items:center;">
+            <button id="btnForecast" class="primary" type="button">Get forecast</button>
+            <span id="statusPill" class="pill" style="display:none;"></span>
+        </div>
+
+        <div id="errorBox" class="error"></div>
+        <div id="okBox" class="ok"></div>
+
+        <div id="forecastOut" style="margin-top: 12px;"></div>
+    </div>
+
+    <div class="muted">
+        API docs: <a href="/docs">/docs</a>
+    </div>
+
+    <script src="/static/ui.js"></script>
+</div>
+</body>
+</html>
