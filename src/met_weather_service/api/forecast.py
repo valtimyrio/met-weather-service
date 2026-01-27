@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from met_weather_service.core.config import get_settings
 from met_weather_service.services.forecast import DailyTemperatureSelector
+from met_weather_service.services.geocoder_gateway import GeocoderRateLimitExceeded, reverse_geocode
 from met_weather_service.services.met_client import truncate_coord
 from met_weather_service.services.met_gateway import get_locationforecast_compact, MetRateLimitExceeded
 
@@ -42,6 +43,13 @@ class LocationInfo(BaseModel):
         description="Requested local time in HH:MM format.",
         json_schema_extra={"example": "14:00"},
     )
+    place_name: str | None = Field(
+        None,
+        description="Human-readable place name (reverse geocoded). Present only when include_place=true and geocoder succeeds.",
+        json_schema_extra={"example": "Belgrade, City of Belgrade, Central Serbia, Serbia"},
+    )
+    country: str | None = Field(None, json_schema_extra={"example": "Serbia"})
+    city: str | None = Field(None, json_schema_extra={"example": "Belgrade"})
 
 
 class DayForecast(BaseModel):
@@ -105,7 +113,7 @@ def validate_timezone(tz_name: str) -> str:
         422: {"description": "Validation error (invalid timezone, time format or coordinates)."},
         500: {"description": "Service misconfiguration (e.g. MET_USER_AGENT missing)."},
         502: {"description": "Upstream MET/network error."},
-        429: {"description": "Too many requests (service-side rate limiting to protect MET)."},
+        429: {"description": "Too many requests (service-side rate limiting to protect outer services)."},
     },
 )
 def forecast(
@@ -141,6 +149,13 @@ def forecast(
                 examples=["14:00"],
             ),
         ] = "14:00",
+        include_place: Annotated[
+            bool,
+            Query(
+                description="If true, enrich response with reverse-geocoded place name (best-effort).",
+                examples=[True],
+            ),
+        ] = False,
 ) -> ForecastResponse:
     logger.info("Request /v1/forecast lat=%s lon=%s tz=%s at=%s", lat, lon, tz, at)
 
@@ -194,12 +209,31 @@ def forecast(
     )
     days = selector.select_from_met_response(data)
 
+    place_name = None
+    country = None
+    city = None
+
+    if include_place:
+        try:
+            place = reverse_geocode(used_lat, used_lon)
+            if place:
+                place_name = place.display_name
+                country = place.country
+                city = place.city
+        except GeocoderRateLimitExceeded:
+            logger.warning("Geocoder rate limit exceeded while include_place=true")
+        except Exception:
+            logger.exception("Geocoder failed while include_place=true")
+
     return ForecastResponse(
         location=LocationInfo(
             lat=used_lat,
             lon=used_lon,
             timezone=tz_name,
             target_time=at,
+            place_name=place_name,
+            country=country,
+            city=city,
         ),
         days=[
             DayForecast(

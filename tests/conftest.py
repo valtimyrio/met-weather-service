@@ -1,4 +1,5 @@
 import pytest
+
 from met_weather_service.core.config import get_settings
 
 
@@ -12,4 +13,9 @@ def _settings_env(monkeypatch) -> None:
         "MET_USER_AGENT",
         "met-weather-service-tests/0.1 (pytest)",
     )
+    monkeypatch.setenv(
+        "GEOCODER_USER_AGENT",
+        "met-weather-service-geocoder-tests/0.1 (pytest)",
+    )
+
     get_settings.cache_clear()
