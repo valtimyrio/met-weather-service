@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from met_weather_service.core.config import get_settings
-from met_weather_service.services.met_client import MetClient
+from met_weather_service.services.met_gateway import get_locationforecast_compact
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["service"])
@@ -47,10 +47,10 @@ def health_met() -> HealthMetResponse:
     settings = get_settings()
 
     try:
-        data = MetClient().fetch_locationforecast_compact(
+        data = get_locationforecast_compact(
             settings.default_lat,
             settings.default_lon,
-        ).data
+        )
 
         updated_at = (
             data.get("properties", {})

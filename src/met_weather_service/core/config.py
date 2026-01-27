@@ -21,6 +21,7 @@ class Settings:
     user_agent: str
     connect_timeout_s: float
     read_timeout_s: float
+    met_cache_ttl_s: float
 
 
 @lru_cache
@@ -32,4 +33,5 @@ def get_settings() -> Settings:
         user_agent=_get_env("MET_USER_AGENT", ""),
         connect_timeout_s=_get_env_float("HTTP_CONNECT_TIMEOUT_S", 5.0),
         read_timeout_s=_get_env_float("HTTP_READ_TIMEOUT_S", 10.0),
+        met_cache_ttl_s=_get_env_float("MET_CACHE_TTL_S", 300.0),
     )

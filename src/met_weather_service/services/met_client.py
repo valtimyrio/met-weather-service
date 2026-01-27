@@ -15,7 +15,8 @@ logger = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class MetResponse:
     status_code: int
-    data: dict[str, Any]
+    data: dict[str, Any] | None
+    last_modified: str | None
 
 
 def truncate_coord(value: float) -> float:
@@ -43,17 +44,32 @@ class MetClient:
             "Accept-Encoding": "gzip, deflate",
         }
 
-    def fetch_locationforecast_compact(self, lat: float, lon: float) -> MetResponse:
+    def fetch_locationforecast_compact(
+            self,
+            lat: float,
+            lon: float,
+            *,
+            if_modified_since: str | None = None,
+    ) -> MetResponse:
         lat = truncate_coord(lat)
         lon = truncate_coord(lon)
 
         url = f"{self._base_url}/compact"
         params = {"lat": lat, "lon": lon}
 
-        logger.info("MET request: %s params=%s", url, params)
+        headers = dict(self._headers)
+        if if_modified_since:
+            headers["If-Modified-Since"] = if_modified_since
+
+        logger.info(
+            "MET request: %s params=%s if_modified_since=%s",
+            url,
+            params,
+            if_modified_since,
+        )
 
         with httpx.Client(
-                headers=self._headers,
+                headers=headers,
                 timeout=self._timeout,
                 follow_redirects=True,
         ) as client:
@@ -64,5 +80,19 @@ class MetClient:
         if resp.status_code == 203:
             logger.warning("MET response is deprecated (203). Consider updating API version.")
 
+        # 304 means "no body, use cached representation"
+        if resp.status_code == 304:
+            return MetResponse(
+                status_code=304,
+                data=None,
+                last_modified=resp.headers.get("Last-Modified"),
+            )
+
         resp.raise_for_status()
-        return MetResponse(status_code=resp.status_code, data=resp.json())
+
+        payload = resp.json()
+        return MetResponse(
+            status_code=resp.status_code,
+            data=payload,
+            last_modified=resp.headers.get("Last-Modified"),
+        )

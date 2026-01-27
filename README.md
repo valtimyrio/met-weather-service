@@ -8,6 +8,15 @@ Key behavior
 - If MET does not provide a point exactly at the requested time, the nearest available point is used.
 - Coordinates sent to MET are truncated to 4 decimal places (MET ToS requirement). The same truncated coordinates are returned in the API response.
 
+## Upstream load protection (caching)
+
+To avoid overloading MET (yr.no), the service uses an in-memory cache per (lat, lon) for MET `compact` responses.
+
+- TTL cache: responses are cached for `MET_CACHE_TTL_S` seconds (default 300).
+- Conditional requests: when TTL expires and the upstream provided `Last-Modified`, the service revalidates with `If-Modified-Since`.
+  - If MET replies `304 Not Modified`, the cached body is reused and TTL is refreshed.
+
+
 ## API
 
 Swagger UI is available at:
@@ -79,6 +88,8 @@ Environment variables:
 - `HTTP_CONNECT_TIMEOUT_S` (optional, default 5.0)
 - `HTTP_READ_TIMEOUT_S` (optional, default 10.0)
 - `LOG_LEVEL` (optional, default INFO)
+- `MET_CACHE_TTL_S` (optional, default 300) - in-memory cache TTL for MET responses (seconds)
+
 
 ## Run locally (without Docker)
 
@@ -124,3 +135,5 @@ pytest
 - A non-empty `User-Agent` header is required and must identify the application.
 - The client sets `Accept-Encoding: gzip, deflate`.
 - Latitude and longitude are truncated to 4 decimal places before calling MET.
+- The service supports conditional requests (`If-Modified-Since`) based on `Last-Modified` header to reduce upstream load.
+

@@ -12,7 +12,8 @@ from pydantic import BaseModel, Field
 
 from met_weather_service.core.config import get_settings
 from met_weather_service.services.forecast import DailyTemperatureSelector
-from met_weather_service.services.met_client import MetClient, truncate_coord
+from met_weather_service.services.met_client import truncate_coord
+from met_weather_service.services.met_gateway import get_locationforecast_compact
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/v1", tags=["forecast"])
@@ -159,7 +160,7 @@ def forecast(
     used_lon = truncate_coord(lon)
 
     try:
-        data = MetClient().fetch_locationforecast_compact(used_lat, used_lon).data
+        data = get_locationforecast_compact(used_lat, used_lon)
 
     except RuntimeError as exc:
         logger.exception("Service misconfiguration in /v1/forecast")
