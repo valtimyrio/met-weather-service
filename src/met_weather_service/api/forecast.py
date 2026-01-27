@@ -3,9 +3,11 @@ from __future__ import annotations
 import logging
 import re
 from datetime import time
+from typing import Annotated
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel, Field
 
 from met_weather_service.core.config import get_settings
 from met_weather_service.services.forecast import DailyTemperatureSelector
@@ -13,6 +15,55 @@ from met_weather_service.services.met_client import MetClient, truncate_coord
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/v1", tags=["forecast"])
+
+
+class LocationInfo(BaseModel):
+    lat: float = Field(
+        ...,
+        description="Latitude used for the upstream MET request (truncated to 4 decimals).",
+        json_schema_extra={"example": 44.8125},
+    )
+    lon: float = Field(
+        ...,
+        description="Longitude used for the upstream MET request (truncated to 4 decimals).",
+        json_schema_extra={"example": 20.4612},
+    )
+
+    timezone: str = Field(
+        ...,
+        description="IANA timezone used for local time selection.",
+        json_schema_extra={"example": "Europe/Belgrade"},
+    )
+
+    target_time: str = Field(
+        ...,
+        description="Requested local time in HH:MM format.",
+        json_schema_extra={"example": "14:00"},
+    )
+
+
+class DayForecast(BaseModel):
+    date: str = Field(
+        ...,
+        description="Local date (YYYY-MM-DD) in the selected timezone.",
+        json_schema_extra={"example": "2026-01-26"},
+    )
+    time: str = Field(
+        ...,
+        description="Selected local datetime (ISO8601) in the selected timezone.",
+        json_schema_extra={"example": "2026-01-26T14:00:00+01:00"},
+    )
+    temperature_c: float = Field(
+        ...,
+        description="Air temperature in Celsius.",
+        json_schema_extra={"example": 2.0},
+    )
+
+
+class ForecastResponse(BaseModel):
+    location: LocationInfo
+    days: list[DayForecast]
+
 
 _HHMM_RE = re.compile(r"^\d{2}:\d{2}$")
 
@@ -39,13 +90,55 @@ def validate_timezone(tz_name: str) -> str:
         raise ValueError("timezone not available")
 
 
-@router.get("/forecast")
+@router.get(
+    "/forecast",
+    response_model=ForecastResponse,
+    summary="Daily temperature near a local time",
+    description=(
+            "Fetches MET forecast timeseries and selects, for each local date, "
+            "the point nearest to the requested local time. "
+            "Coordinates are truncated to 4 decimals as required by MET ToS."
+    ),
+    responses={
+        422: {"description": "Validation error (invalid timezone, time format or coordinates)."},
+        500: {"description": "Service misconfiguration (e.g. MET_USER_AGENT missing)."},
+        502: {"description": "Upstream MET/network error."},
+    },
+)
 def forecast(
-        lat: float | None = Query(default=None, ge=-90, le=90),
-        lon: float | None = Query(default=None, ge=-180, le=180),
-        tz: str = Query(default="Europe/Belgrade"),
-        at: str = Query(default="14:00"),
-) -> dict:
+        lat: Annotated[
+            float | None,
+            Query(
+                ge=-90,
+                le=90,
+                description="Latitude in range [-90, 90]. Defaults to Belgrade.",
+                examples=[44.81259],
+            ),
+        ] = None,
+        lon: Annotated[
+            float | None,
+            Query(
+                ge=-180,
+                le=180,
+                description="Longitude in range [-180, 180]. Defaults to Belgrade.",
+                examples=[20.46129],
+            ),
+        ] = None,
+        tz: Annotated[
+            str,
+            Query(
+                description="IANA timezone name.",
+                examples=["Europe/Belgrade"],
+            ),
+        ] = "Europe/Belgrade",
+        at: Annotated[
+            str,
+            Query(
+                description="Target local time in strict HH:MM format.",
+                examples=["14:00"]
+            ),
+        ] = "14:00",
+) -> ForecastResponse:
     logger.info("Request /v1/forecast lat=%s lon=%s tz=%s at=%s", lat, lon, tz, at)
 
     settings = get_settings()
@@ -82,19 +175,19 @@ def forecast(
     )
     days = selector.select_from_met_response(data)
 
-    return {
-        "location": {
-            "lat": used_lat,
-            "lon": used_lon,
-            "timezone": tz_name,
-            "target_time": at,
-        },
-        "days": [
-            {
-                "date": p.date,
-                "time": p.time,
-                "temperature_c": p.temperature_c,
-            }
+    return ForecastResponse(
+        location=LocationInfo(
+            lat=used_lat,
+            lon=used_lon,
+            timezone=tz_name,
+            target_time=at,
+        ),
+        days=[
+            DayForecast(
+                date=p.date,
+                time=p.time,
+                temperature_c=p.temperature_c,
+            )
             for p in days
         ],
-    }
+    )

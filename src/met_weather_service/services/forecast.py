@@ -39,6 +39,11 @@ def parse_met_iso_datetime(value: str) -> datetime:
 
 
 def iter_met_points(data: dict[str, Any]) -> Iterator[MetPoint]:
+    """
+    Yield normalized forecast points from MET Locationforecast response.
+
+    Malformed entries are skipped with a warning.
+    """
     timeseries = data.get("properties", {}).get("timeseries", [])
 
     if not isinstance(timeseries, list):
@@ -66,6 +71,9 @@ def select_daily_temperature_near_time(
         tz_name: str,
         target_time: time,
 ) -> list[ForecastPoint]:
+    """
+    Select one forecast point per local date nearest to the target local time.
+    """
     tz = ZoneInfo(tz_name)
 
     best: dict[str, tuple[timedelta, datetime, float]] = {}

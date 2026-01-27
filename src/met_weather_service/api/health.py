@@ -2,6 +2,7 @@ import logging
 
 import httpx
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
 
 from met_weather_service.core.config import get_settings
 from met_weather_service.services.met_client import MetClient
@@ -10,13 +11,39 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["service"])
 
 
-@router.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+class HealthResponse(BaseModel):
+    status: str = Field(
+        ...,
+        json_schema_extra={"example": "ok"},
+    )
 
 
-@router.get("/health/met")
-def health_met() -> dict[str, str]:
+class HealthMetResponse(BaseModel):
+    status: str = Field(..., json_schema_extra={"example": "ok"})
+    met: str = Field(..., json_schema_extra={"example": "ok"})
+    updated_at: str = Field(
+        ...,
+        description="Value of properties.meta.updated_at from MET response.",
+        json_schema_extra={"example": "2026-01-26T17:15:58Z"},
+    )
+
+
+@router.get("/health", response_model=HealthResponse, summary="Service health")
+def health() -> HealthResponse:
+    return HealthResponse(status="ok")
+
+
+@router.get(
+    "/health/met",
+    response_model=HealthMetResponse,
+    summary="Upstream MET health",
+    description="Checks connectivity to MET Norway Locationforecast API.",
+    responses={
+        500: {"description": "Service misconfiguration (e.g. MET_USER_AGENT missing)."},
+        502: {"description": "Upstream MET/network error."},
+    },
+)
+def health_met() -> HealthMetResponse:
     settings = get_settings()
 
     try:
@@ -32,11 +59,12 @@ def health_met() -> dict[str, str]:
             .get("updated_at", "")
         )
 
-        return {
-            "status": "ok",
-            "met": "ok",
-            "updated_at": str(updated_at),
-        }
+        return HealthMetResponse(
+            status="ok",
+            met="ok",
+            updated_at=str(updated_at),
+        )
+
 
     except RuntimeError as exc:
         # service misconfiguration (e.g. MET_USER_AGENT missing)
