@@ -6,6 +6,7 @@ from datetime import time
 from typing import Annotated
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+import httpx
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
@@ -135,7 +136,7 @@ def forecast(
             str,
             Query(
                 description="Target local time in strict HH:MM format.",
-                examples=["14:00"]
+                examples=["14:00"],
             ),
         ] = "14:00",
 ) -> ForecastResponse:
@@ -159,15 +160,27 @@ def forecast(
 
     try:
         data = MetClient().fetch_locationforecast_compact(used_lat, used_lon).data
+
     except RuntimeError as exc:
-        logger.exception("Service misconfiguration")
+        logger.exception("Service misconfiguration in /v1/forecast")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
-    except Exception as exc:
-        logger.exception("MET upstream failure")
-        raise HTTPException(
-            status_code=502,
-            detail=f"MET upstream error: {type(exc).__name__}",
-        ) from exc
+
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.exception(
+            "MET upstream failure in /v1/forecast "
+            "lat=%s lon=%s used_lat=%s used_lon=%s tz=%s at=%s",
+            lat,
+            lon,
+            used_lat,
+            used_lon,
+            tz_name,
+            at,
+        )
+        raise HTTPException(status_code=502, detail="MET upstream error") from exc
+
+    except Exception:
+        logger.exception("Unexpected error in /v1/forecast")
+        raise
 
     selector = DailyTemperatureSelector(
         tz_name=tz_name,

@@ -37,7 +37,7 @@ def health() -> HealthResponse:
     "/health/met",
     response_model=HealthMetResponse,
     summary="Upstream MET health",
-    description="Checks connectivity to MET Norway Locationforecast API.",
+    description="Checks connectivity to MET for the default coordinates (Belgrade by default).",
     responses={
         500: {"description": "Service misconfiguration (e.g. MET_USER_AGENT missing)."},
         502: {"description": "Upstream MET/network error."},
@@ -47,8 +47,7 @@ def health_met() -> HealthMetResponse:
     settings = get_settings()
 
     try:
-        client = MetClient()
-        data = client.fetch_locationforecast_compact(
+        data = MetClient().fetch_locationforecast_compact(
             settings.default_lat,
             settings.default_lon,
         ).data
@@ -65,24 +64,18 @@ def health_met() -> HealthMetResponse:
             updated_at=str(updated_at),
         )
 
-
     except RuntimeError as exc:
-        # service misconfiguration (e.g. MET_USER_AGENT missing)
-        logger.exception("Service misconfiguration")
+        logger.exception("Service misconfiguration in /health/met")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-    except httpx.HTTPError as exc:
-        # network / upstream HTTP errors
-        logger.exception("MET network/http error")
-        raise HTTPException(
-            status_code=502,
-            detail=f"MET upstream error: {type(exc).__name__}",
-        ) from exc
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.exception(
+            "MET upstream failure in /health/met default_lat=%s default_lon=%s",
+            settings.default_lat,
+            settings.default_lon,
+        )
+        raise HTTPException(status_code=502, detail="MET upstream error") from exc
 
-    except Exception as exc:
-        # anything unexpected
-        logger.exception("Unexpected MET error")
-        raise HTTPException(
-            status_code=502,
-            detail=f"MET upstream error: {type(exc).__name__}",
-        ) from exc
+    except Exception:
+        logger.exception("Unexpected error in /health/met")
+        raise
