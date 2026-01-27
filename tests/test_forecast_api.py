@@ -37,11 +37,12 @@ def test_forecast_with_all_params_and_timezone_selection() -> None:
 
     client = TestClient(app)
 
+    # values where truncate != round
     resp = client.get(
         "/v1/forecast",
         params={
-            "lat": "44.8125123",
-            "lon": "20.4612009",
+            "lat": "44.81259",  # truncate -> 44.8125, round -> 44.8126
+            "lon": "20.46129",  # truncate -> 20.4612, round -> 20.4613
             "tz": "Europe/Belgrade",
             "at": "14:00",
         },
@@ -54,11 +55,12 @@ def test_forecast_with_all_params_and_timezone_selection() -> None:
     assert body["location"]["timezone"] == "Europe/Belgrade"
     assert body["location"]["target_time"] == "14:00"
 
-    assert body["location"]["lat"] == 44.8125  # truncated
+    # Must reflect the actual MET request coords (truncate), not round
+    assert body["location"]["lat"] == 44.8125
     assert body["location"]["lon"] == 20.4612
 
     days = body["days"]
-    assert [d["date"] for d in days] == ["2026-01-26", "2026-01-27"]  # 2 days
+    assert [d["date"] for d in days] == ["2026-01-26", "2026-01-27"]
 
     # For 14:00 Europe/Belgrade at winter chooses 13:00Z (14:00+01:00)
     assert days[0]["temperature_c"] == 2.0
