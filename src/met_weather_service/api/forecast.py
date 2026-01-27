@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import time
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -8,22 +9,25 @@ from fastapi import APIRouter, HTTPException, Query
 
 from met_weather_service.core.config import get_settings
 from met_weather_service.services.forecast import DailyTemperatureSelector
-from met_weather_service.services.met_client import MetClient
+from met_weather_service.services.met_client import MetClient, truncate_coord
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/v1", tags=["forecast"])
 
+_HHMM_RE = re.compile(r"^\d{2}:\d{2}$")
+
 
 def parse_hhmm(value: str) -> time:
-    try:
-        hh_str, mm_str = value.split(":")
-        hh = int(hh_str)
-        mm = int(mm_str)
-        if not (0 <= hh <= 23 and 0 <= mm <= 59):
-            raise ValueError
-        return time(hour=hh, minute=mm)
-    except ValueError as exc:
-        raise ValueError("time must be in HH:MM format") from exc
+    if not _HHMM_RE.match(value):
+        raise ValueError("time must be in HH:MM format")
+
+    hh_str, mm_str = value.split(":")
+    hh = int(hh_str)
+    mm = int(mm_str)
+    if not (0 <= hh <= 23 and 0 <= mm <= 59):
+        raise ValueError("time must be in HH:MM format")
+
+    return time(hour=hh, minute=mm)
 
 
 def validate_timezone(tz_name: str) -> str:
@@ -37,8 +41,8 @@ def validate_timezone(tz_name: str) -> str:
 
 @router.get("/forecast")
 def forecast(
-        lat: float | None = Query(default=None),
-        lon: float | None = Query(default=None),
+        lat: float | None = Query(default=None, ge=-90, le=90),
+        lon: float | None = Query(default=None, ge=-180, le=180),
         tz: str = Query(default="Europe/Belgrade"),
         at: str = Query(default="14:00"),
 ) -> dict:
@@ -57,8 +61,14 @@ def forecast(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+    used_lat = truncate_coord(lat)
+    used_lon = truncate_coord(lon)
+
     try:
-        data = MetClient().fetch_locationforecast_compact(lat, lon).data
+        data = MetClient().fetch_locationforecast_compact(used_lat, used_lon).data
+    except RuntimeError as exc:
+        logger.exception("Service misconfiguration")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
     except Exception as exc:
         logger.exception("MET upstream failure")
         raise HTTPException(
@@ -70,13 +80,12 @@ def forecast(
         tz_name=tz_name,
         target_time=target_time,
     )
-
     days = selector.select_from_met_response(data)
 
     return {
         "location": {
-            "lat": round(lat, 4),
-            "lon": round(lon, 4),
+            "lat": used_lat,
+            "lon": used_lon,
             "timezone": tz_name,
             "target_time": at,
         },

@@ -18,7 +18,7 @@ class MetResponse:
     data: dict[str, Any]
 
 
-def _truncate_coord(value: float) -> float:
+def truncate_coord(value: float) -> float:
     """
     Truncate coordinate to max 4 decimal places as required by MET ToS.
     """
@@ -44,8 +44,8 @@ class MetClient:
         }
 
     def fetch_locationforecast_compact(self, lat: float, lon: float) -> MetResponse:
-        lat = _truncate_coord(lat)
-        lon = _truncate_coord(lon)
+        lat = truncate_coord(lat)
+        lon = truncate_coord(lon)
 
         url = f"{self._base_url}/compact"
         params = {"lat": lat, "lon": lon}
