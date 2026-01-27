@@ -1,0 +1,8 @@
+services:
+  met-weather-service:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      LOG_LEVEL: INFO
+      MET_USER_AGENT: "met-weather-service/0.1 (github.com/user/met-weather-service, mail@example.com)" # should rewrite
