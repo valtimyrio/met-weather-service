@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 from met_weather_service.core.config import get_settings
 from met_weather_service.services.forecast import DailyTemperatureSelector
 from met_weather_service.services.met_client import truncate_coord
-from met_weather_service.services.met_gateway import get_locationforecast_compact
+from met_weather_service.services.met_gateway import get_locationforecast_compact, MetRateLimitExceeded
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/v1", tags=["forecast"])
@@ -105,6 +105,7 @@ def validate_timezone(tz_name: str) -> str:
         422: {"description": "Validation error (invalid timezone, time format or coordinates)."},
         500: {"description": "Service misconfiguration (e.g. MET_USER_AGENT missing)."},
         502: {"description": "Upstream MET/network error."},
+        429: {"description": "Too many requests (service-side rate limiting to protect MET)."},
     },
 )
 def forecast(
@@ -165,6 +166,10 @@ def forecast(
     except RuntimeError as exc:
         logger.exception("Service misconfiguration in /v1/forecast")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    except MetRateLimitExceeded as exc:
+        logger.warning("Rate limit exceeded in /v1/forecast")
+        raise HTTPException(status_code=429, detail="Too many requests") from exc
 
     except (httpx.HTTPError, ValueError) as exc:
         logger.exception(

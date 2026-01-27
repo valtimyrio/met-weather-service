@@ -22,6 +22,8 @@ class Settings:
     connect_timeout_s: float
     read_timeout_s: float
     met_cache_ttl_s: float
+    met_rl_max_calls: int
+    met_rl_period_s: float
 
 
 @lru_cache
@@ -34,4 +36,6 @@ def get_settings() -> Settings:
         connect_timeout_s=_get_env_float("HTTP_CONNECT_TIMEOUT_S", 5.0),
         read_timeout_s=_get_env_float("HTTP_READ_TIMEOUT_S", 10.0),
         met_cache_ttl_s=_get_env_float("MET_CACHE_TTL_S", 300.0),
+        met_rl_max_calls=int(_get_env_float("MET_RL_MAX_CALLS", 60.0)),
+        met_rl_period_s=_get_env_float("MET_RL_PERIOD_S", 60.0),
     )

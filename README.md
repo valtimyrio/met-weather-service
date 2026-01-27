@@ -15,6 +15,7 @@ To avoid overloading MET (yr.no), the service uses an in-memory cache per (lat, 
 - TTL cache: responses are cached for `MET_CACHE_TTL_S` seconds (default 300).
 - Conditional requests: when TTL expires and the upstream provided `Last-Modified`, the service revalidates with `If-Modified-Since`.
   - If MET replies `304 Not Modified`, the cached body is reused and TTL is refreshed.
+- Rate limiting: the service limits upstream MET requests per process. If exceeded, API returns `429 Too many requests`.
 
 
 ## API
@@ -89,6 +90,9 @@ Environment variables:
 - `HTTP_READ_TIMEOUT_S` (optional, default 10.0)
 - `LOG_LEVEL` (optional, default INFO)
 - `MET_CACHE_TTL_S` (optional, default 300) - in-memory cache TTL for MET responses (seconds)
+- `MET_RL_MAX_CALLS` (optional, default 60) - maximum upstream MET calls per `MET_RL_PERIOD_S` seconds (per process)
+- `MET_RL_PERIOD_S` (optional, default 60) - rate limit window size (seconds)
+
 
 
 ## Run locally (without Docker)

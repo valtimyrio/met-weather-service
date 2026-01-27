@@ -8,6 +8,12 @@ from typing import Any
 
 from met_weather_service.core.config import get_settings
 from met_weather_service.services.met_client import MetClient, truncate_coord
+from met_weather_service.services.rate_limiter import SlidingWindowRateLimiter
+
+
+class MetRateLimitExceeded(Exception):
+    pass
+
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +28,9 @@ class _CacheEntry:
 _cache_lock = threading.Lock()
 _cache: dict[tuple[float, float], _CacheEntry] = {}
 
+_limiter: SlidingWindowRateLimiter | None = None
+_limiter_cfg: tuple[int, float] | None = None
+
 
 def clear_cache() -> None:
     """
@@ -29,6 +38,9 @@ def clear_cache() -> None:
     """
     with _cache_lock:
         _cache.clear()
+    global _limiter, _limiter_cfg
+    _limiter = None
+    _limiter_cfg = None
 
 
 def get_locationforecast_compact(lat: float, lon: float) -> dict[str, Any]:
@@ -47,6 +59,17 @@ def get_locationforecast_compact(lat: float, lon: float) -> dict[str, Any]:
     if not settings.user_agent:
         raise RuntimeError("MET_USER_AGENT is not set (required by MET Norway ToS).")
 
+    global _limiter, _limiter_cfg
+
+    max_calls = int(settings.met_rl_max_calls)
+    period_s = float(settings.met_rl_period_s)
+
+    if max_calls > 0 and period_s > 0:
+        cfg = (max_calls, period_s)
+        if _limiter is None or _limiter_cfg != cfg:
+            _limiter = SlidingWindowRateLimiter(max_calls=max_calls, period_s=period_s)
+            _limiter_cfg = cfg
+
     ttl_s = float(settings.met_cache_ttl_s)
 
     lat_t = truncate_coord(lat)
@@ -64,6 +87,10 @@ def get_locationforecast_compact(lat: float, lon: float) -> dict[str, Any]:
     if_modified_since: str | None = None
     if entry:
         if_modified_since = entry.last_modified
+
+    if _limiter is not None and not _limiter.allow():
+        logger.warning("MET upstream rate limit exceeded max_calls=%s period_s=%s", max_calls, period_s)
+        raise MetRateLimitExceeded("MET upstream rate limit exceeded")
 
     client = MetClient()
     resp = client.fetch_locationforecast_compact(lat_t, lon_t, if_modified_since=if_modified_since)
