@@ -15,7 +15,11 @@ class HealthResponse(BaseModel):
     status: str = Field(
         ...,
         json_schema_extra={"example": "ok"},
-    )
+    ),
+    git_sha: str = Field(
+        ...,
+        json_schema_extra={"example": "unknown"},
+    ),
 
 
 class HealthMetResponse(BaseModel):
@@ -30,7 +34,8 @@ class HealthMetResponse(BaseModel):
 
 @router.get("/health", response_model=HealthResponse, summary="Service health")
 def health() -> HealthResponse:
-    return HealthResponse(status="ok")
+    settings = get_settings()
+    return HealthResponse(status="ok", git_sha=settings.git_sha)
 
 
 @router.get(

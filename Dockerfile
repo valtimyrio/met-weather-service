@@ -16,6 +16,10 @@ COPY src/ /app/src/
 RUN pip install --no-cache-dir --upgrade pip \
   && pip install --no-cache-dir .
 
+ARG GIT_SHA=unknown
+ENV GIT_SHA=$GIT_SHA
+
+
 RUN useradd -r -u 10001 appuser && chown -R appuser:appuser /app
 USER appuser
 

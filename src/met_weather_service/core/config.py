@@ -34,6 +34,7 @@ class Settings:
     geocoder_cache_ttl_s: float
     geocoder_rl_max_calls: int
     geocoder_rl_period_s: float
+    git_sha: str
 
 
 @lru_cache
@@ -53,5 +54,5 @@ def get_settings() -> Settings:
         geocoder_cache_ttl_s=_get_env_float("GEOCODER_CACHE_TTL_S", 86_400.0),
         geocoder_rl_max_calls=_get_env_int("GEOCODER_RL_MAX_CALLS", 1),
         geocoder_rl_period_s=_get_env_float("GEOCODER_RL_PERIOD_S", 1.0),
-
+        git_sha=_get_env("GIT_SHA", default="unknown"),
     )
